@@ -1,7 +1,6 @@
-# Task_tracker
+# Task_tracker 
 
-A command line task manager
-
+Manager and track task 
 ## Functionalities
 
 - Add a task
