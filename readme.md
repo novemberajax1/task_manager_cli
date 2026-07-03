@@ -1,6 +1,7 @@
-# Task_tracker 
+# Task_tracker
 
-Manager and track task 
+Manager and track task
+
 ## Functionalities
 
 - Add a task

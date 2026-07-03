@@ -5,8 +5,7 @@ from datetime import datetime
 
 
 #check and find dict keys with duplicate values in each tasks where the first task might be swimming and what if the user enter the second task with the same task name also swimming, how doi preven that 
-#?? check cases of arguments, enforce it within function 
-
+#Checking duplicate requires comparing against the whole database 
 def add_task(task_desc:str):
     #!ensure everything is lowercased even for distinct characters aggressive 
     try:
@@ -17,14 +16,11 @@ def add_task(task_desc:str):
 
         #?check if the nums has existing numbers, if not reset uid to 1 
         #?Need to convert back to string as JSON keys are strings after calcualtion of the next number 
-            if nums:
-                uid = str(len(nums) + 1)
-            else:
-                uid = "1" 
+            uid = str(max(nums) + 1) if nums else "1"
 
     except FileNotFoundError: #?firsst task approach here, NOT AN ERROR, expected situation
         data = {}
-        uid = 1 
+        uid = "1"
         #?local handling for first task 
 
     now = datetime.now().isoformat(sep = " ")
@@ -32,8 +28,6 @@ def add_task(task_desc:str):
     #?check and find dict kets with duplciate values, we wanna check the values,
 
     unique_desc = [vals["description"] for vals in data.values()] #?extract from actual dict, added tasks descriptions
-
-
     if task_desc not in unique_desc:
         #?task identifiable by ID 
         #? populating
@@ -54,76 +48,86 @@ def add_task(task_desc:str):
     else:
         raise ValueError("Duplication of tasks is not allowed")
 
-#!when user fill in invalid id, enforce it
-#!maybe add status option
+
+#enforce update duplication and maybe add check status option
+#check task by id before updating, changes exactly one task 
 def update_task(tid: str,task_desc: str):
     with open("tasks.json","r") as ut:
         all_data = json.load(ut) #? dicts of dicts
 
-        valid_ids = [key for key in all_data if key == tid]
-        if tid not in valid_ids:
-            #!propograte up the call stack 
+        #the key is the id 
+        if tid not in all_data:
             raise IndexError(f"Task with ID {tid} does not exists")
         
-        for values in all_data.values():
-            values["description"] = task_desc
+        uniq_task = [vals["description"] for vals in all_data.values()]
+        if task_desc in uniq_task:
+            raise ValueError(f"Task description -> {task_desc} already exists, Update terminated")
     
-    #?write the wholestructure back 
+
+        #do not need to looop through all values 
+        all_data[tid]["description"] = task_desc
+        all_data[tid]["updatedAt"] = datetime.now().isoformat(sep=" ")
+    
+    #write the wholestructure back 
     with open("tasks.json","w") as wf:
         json.dump(all_data,wf,indent=4)
 
 
-#!id should be unique and stable, do not change the ids of other tasks after deletio to avoid confusion for other functionalities
-#?do not expect the user enters the id 
+#id should be unique and stable, do not change the ids of other tasks after deletio to avoid confusion for other functionalities
+#do not expect the user enters the correct id 
 def delete_task(task_id:str):
     with open("tasks.json") as dt:
         data = json.load(dt) #!dicts of dicts 
 
-        aid = [key for key in data if key == task_id]
-        if task_id not in aid:
-            raise IndexError(f"Deletion not possible as Task with ID {task_id} does not exist")
+        if task_id not in data:
+            raise KeyError(f"Deletion not possible as Task with ID {task_id} does not exist")
         
-        for id in aid:
-            del data[id]
+        del data[task_id]
 
     #?Overwriting it 
     with open("tasks.json","w") as sf:
         json.dump(data,sf,indent=4)
 
-#?the list created a separate object, static copy
-#?the status option is enforced in paarsing before every entering this function 
-#!what if the task to be marked does not exists,what happen, think 
+
+#the status option is enforced in paarsing before every entering this function 
+#we only need to check id since if the task id does not exists, we raise an errror 
+#what if the task to be marked does not exists,what happen, think 
 def marking_status_task(tid:str, status:str):
     #?Be specific i guess
 
     with open("tasks.json","r") as rf:
         data = json.load(rf)
 
-        for task_id, desc_vals in data.items():
-            if task_id == tid:
-                desc_vals["status"] = status
+        if tid not in data:
+            raise KeyError(f"Task with {tid} does not exists")
+        
+        data[tid]["status"] = status 
+        data[tid]["updatedAt"] = datetime.now().isoformat(sep=" ")
 
     with open("tasks.json","w") as ws:
         json.dump(data,ws,indent=4)
 
 
 
-#?internal logic
-#?shold be dynamic
-#?the parsing handles if the user typed the correct arguments
-#?the validation checks if what the user typed currently exists in the database itself, subtle difference 
+#shold be dynamic
+#use a flag to optimize instead of creating a new list obj
+# scan all tasks because listing requires checking every task 
+#the parsing handles if the user typed the correct arguments
+#the validation checks if what the user typed currently exists in the database itself, subtle difference 
 def task_listing_based_on_status(status: str) :
     with open("tasks.json") as fw:
-        data = json.load(fw)        
-        tasks = [vals for vals in data.values() if vals["status"] == status] #!output the task that satisfy the status provided 
+        data = json.load(fw)
 
-        #!this means if the status the user provide is absent or does not exists , 
-        if not tasks:
+        #!this means if the status the user provide is absent or does not exists in the database      
+        statuses  = [vals["status"] for vals in data.values()] 
+        if status not in statuses:
             print(f"There are currently no task with status --> {status}")
             return 
         
-        for task in tasks:
-            print(f"Status: {task['status']} --> {task['description']}")
+        for kid, vals in data.items():
+            if vals["status"] == status:
+                print(f"ID: {kid} -> Status: {vals['status']} -> Description: {vals['description']}")
+
         
 
 if __name__ == "__main__":
@@ -137,7 +141,7 @@ if __name__ == "__main__":
     #?Create the parse for the "add" command 
     #?generate ID automatically 
     parser_add = sub_parsers.add_parser("add",help="Add a task") #?command 
-    parser_add.add_argument("task", help="description of the task",type =  str.lower) #? positional args, convert as early as possible in the command line 
+    parser_add.add_argument("task", help="description of the task",type = str.casefold) #? positional args, convert as early as possible in the command line 
 
     #?Create the parser for the "update" command
     parser_update = sub_parsers.add_parser("update",help="Update a task") #?command
@@ -155,12 +159,12 @@ if __name__ == "__main__":
      
     parser_mark = sub_parsers.add_parser("mark",help="Markinig a task as in progress or done") #command 
     parser_mark.add_argument("id",help="Task id to mark") #? the id has to be a string 
-    parser_mark.add_argument("status", choices = ("in progress","done","todo"), help="Either mark it as in progress or done") #?flags
+    parser_mark.add_argument("status", choices = ("in-progress","done","todo"), help="Either mark it as in progress or done") #?flags
 
     
     #?Create the parser for the "list" command
     parser_list = sub_parsers.add_parser('list',help="list available tasks") #command
-    parser_list.add_argument("status", choices = ("in progress","done","todo"), help="Task filtered by status")
+    parser_list.add_argument("status", choices = ("in-progress","done","todo"), help="Task status to filter by ")
 
     args = parser.parse_args()
     
@@ -184,7 +188,7 @@ if __name__ == "__main__":
         elif args.subcommands == "list":
             task_listing_based_on_status(args.status)
 
-#!if the user request a status that did not populate inside the JSON file
+#if the user request a status that did not populate inside the JSON file
     
     except JSONDecodeError as jsonerr: 
         print(f"{jsonerr}: The file being loaded is invalid JSON and corrupted")
